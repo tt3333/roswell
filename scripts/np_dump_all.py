@@ -54,15 +54,11 @@ print("SF memory is detected")
 #HIROM:ALL
 write_byte(0x2400, 0x04)
 
-# dump boot sector in bank $C0
+# dump boot sector in bank $C0,E0
 show_hidden(0xC0)
-data = c.read_cart(0xC0FF00, 256)
-save("bootsect_C0.bin", data)
-
-# dump boot sector in bank $E0
 show_hidden(0xE0)
-data = c.read_cart(0xE0FF00, 256)
-save("bootsect_E0.bin", data)
+data = c.read_cart(0xC0FF00, 256) + c.read_cart(0xE0FF00, 256)
+save("np.map", data)
 
 # dump $0000-FFFF in banks $C0-FF
 read_reset(0xC0)
