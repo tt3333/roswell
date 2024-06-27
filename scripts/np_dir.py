@@ -63,5 +63,9 @@ print("SF memory is detected")
 write_byte(0x2400, 0x04)
 read_reset(0xC0)
 
+if c.read_cart(0xC61FF0, 16).tobytes() != b"MULTICASSETTE 32":
+	print("Menu is not detected")
+	sys.exit()
+
 for base in range(0xC60000, 0xC70000, 0x2000):
 	read_dir(base)

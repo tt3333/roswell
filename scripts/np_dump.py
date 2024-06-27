@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import roswell.usbclient as usbclient
-import array
+import sys
 
 def write_byte(addr, value):
 	c.write_cart(addr, value.to_bytes(1, 'little'))
@@ -45,6 +45,17 @@ def dump(base):
 	sram_blocks       = read_word(base + 0x05) >> 4
 	title             = read_string(base + 0x13, 44, 'shift-jis')
 
+	if index == 0 and flash_blocks == 0:
+		# ROMs created by SF Memory Binary Maker have the first directory entry filled with zeros.
+		# To enable dumping of the menu program, if the number of blocks used in the first entry is 0, it is considered to be 1 block.
+		flash_blocks = 1
+
+	if flash_blocks == 0 or first_flash_block + flash_blocks > 8 or first_sram_block + sram_blocks > 16:
+		return
+
+	if title == "":
+		title = str(index)
+
 	first_bank = 0xC0 + (first_flash_block << 3)
 	last_bank = first_bank + (flash_blocks << 3) - 1
 	data = c.read_banks(first_bank, last_bank, 0x0000, 0xFFFF)
@@ -72,6 +83,10 @@ print("SF memory is detected")
 write_byte(0x2400, 0x04)
 read_reset(0xC0)
 read_reset(0xE0)
+
+if c.read_cart(0xC61FF0, 16).tobytes() != b"MULTICASSETTE 32":
+	print("Menu is not detected")
+	sys.exit()
 
 sram = c.read_banks(0x20, 0x23, 0x6000, 0x7FFF)
 for base in range(0xC60000, 0xC70000, 0x2000):
