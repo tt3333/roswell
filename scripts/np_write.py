@@ -91,7 +91,6 @@ def page_write(addr, data):
 	write_byte(bank | 0xAAAA, 0xA0)
 	c.write_cart(addr, data)
 	write_byte(addr + 0x7F, data[0x7F])
-	return wait(bank) & 0x10
 
 # -----------------------------------------------------------------------------
 
@@ -152,17 +151,44 @@ def write_rom(data):
 	print("erasing ROM", end='\r');
 	chip_erase()
 
-	i = 0
-	size = len(data)
-	while i < size:
-		print("writing ROM %u / %u bytes" % (i, size), end='\r')
-		if page_write(0xC00000 + i, data[i:i+0x80]):
-			break
-		i += 0x80
+	rom1 = data[0x000000:0x200000]
+	rom2 = data[0x200000:0x400000]
+	size1 = len(rom1)
+	size2 = len(rom2)
+	offset1 = 0
+	offset2 = 0
+	busy1 = False
+	busy2 = False
 
-	print("writing ROM %u / %u bytes" % (i, size))
+	while (offset1 < size1) or (offset2 < size2):
+		if offset1 < size1:
+			if not busy1:
+				print("writing ROM %u / %u bytes" % (offset1 + offset2, size1 + size2), end='\r')
+				page_write(0xC00000 | offset1, rom1[offset1:offset1+0x80])
+				busy1 = True
+			else:
+				status = read_byte(0xC00000)
+				if status & 0x80:
+					busy1 = False
+					if status & 0x10:
+						break
+					offset1 += 0x80
+		if offset2 < size2:
+			if not busy2:
+				print("writing ROM %u / %u bytes" % (offset1 + offset2, size1 + size2), end='\r')
+				page_write(0xE00000 | offset2, rom2[offset2:offset2+0x80])
+				busy2 = True
+			else:
+				status = read_byte(0xE00000)
+				if status & 0x80:
+					busy2 = False
+					if status & 0x10:
+						break
+					offset2 += 0x80
+
+	print("writing ROM %u / %u bytes" % (offset1 + offset2, size1 + size2))
 	read_reset()
-	return i
+	return offset1 + offset2
 
 def verify_rom(data):
 	i = 0
