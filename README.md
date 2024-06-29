@@ -11,10 +11,13 @@ Currently available:
 * `np_dir.py` - show directory of SF Memory (Nintendo Power)
 * `np_dump.py` - dump individual ROM and SRAM images from SF Memory (Nintendo Power)
 * `np_dump_all.py` - dump whole Flash and SRAM images from SF Memory (Nintendo Power)
+* `np_write.py` - rewrite SF Memory (Nintendo Power)
 
 The `loadrom` script is to be used with the USB transfer option on the Super UFO main menu. Other scripts communicate with the server program after it's running on the console.
 
 The `server` directory contains the source for the SNES-side server program (requres libSFX).
+
+Please run `np_dump_all.py` to dump original ROM and mapping from SF Memory cart before you upload any new rom.
 
 Documentation so far:
 * `header.txt` - copier header format for ROM dumps and USB uploads
