@@ -3,94 +3,12 @@
 from math import ceil
 import roswell.usbclient as usbclient
 import roswell.romutils as romutils
+import roswell.nputils as nputils
 import argparse
 import atexit
 import os
 import sys
 import time
-
-# -----------------------------------------------------------------------------
-
-def write_byte(addr, value):
-	c.write_cart(addr, value.to_bytes(1, 'little'))
-
-def write_byte2(addr, value):
-	# write the same value to two chips
-	write_byte(0xC00000 | addr, value)
-	write_byte(0xE00000 | addr, value)
-
-def read_byte(addr):
-	return c.read_cart(addr, 1)[0]
-
-def wait(addr):
-	while True:
-		status = read_byte(addr)
-		if status & 0x80:
-			return status
-
-def wakeup():
-	write_byte(0x2400, 0x09)
-	dummy = read_byte(0x2400)
-	write_byte(0x2401, 0x28)
-	write_byte(0x2401, 0x84)
-	write_byte(0x2400, 0x06)
-	write_byte(0x2400, 0x39)
-
-def read_reset():
-	write_byte2(0xAAAA, 0xAA)
-	write_byte2(0x5554, 0x55)
-	write_byte2(0xAAAA, 0xF0)
-
-def show_hidden():
-	write_byte2(0, 0x38)
-	write_byte2(0, 0xD0)
-	write_byte2(0, 0x71)
-	wait(0xC00004)
-	wait(0xE00004)
-	write_byte2(0, 0x72)
-	write_byte2(0, 0x75)
-
-def hidden_erase():
-	write_byte2(0x1AAAA, 0xAA)
-	write_byte2(0x15554, 0x55)
-	write_byte2(0x1AAAA, 0x77)
-	write_byte2(0x0AAAA, 0xAA)
-	write_byte2(0x05554, 0x55)
-	write_byte2(0x0AAAA, 0xE0)
-	wait(0xC00000)
-	wait(0xE00000)
-
-def chip_erase():
-	write_byte2(0xAAAA, 0xAA)
-	write_byte2(0x5554, 0x55)
-	write_byte2(0xAAAA, 0x80)
-	write_byte2(0xAAAA, 0xAA)
-	write_byte2(0x5554, 0x55)
-	write_byte2(0xAAAA, 0x10)
-	wait(0xC00000)
-	wait(0xE00000)
-
-def hidden_write(addr, data):
-	assert(len(data) == 128)
-	bank = addr & 0xE00000
-	write_byte(bank | 0x1AAAA, 0xAA)
-	write_byte(bank | 0x15554, 0x55)
-	write_byte(bank | 0x1AAAA, 0x77)
-	write_byte(bank | 0xAAAA, 0xAA)
-	write_byte(bank | 0x5554, 0x55)
-	write_byte(bank | 0xAAAA, 0x99)
-	c.write_cart(addr, data)
-	write_byte(addr + 0x7F, data[0x7F])
-	return wait(bank) & 0x10
-
-def page_write(addr, data):
-	assert(len(data) == 128)
-	bank = addr & 0xE00000
-	write_byte(bank | 0xAAAA, 0xAA)
-	write_byte(bank | 0x5554, 0x55)
-	write_byte(bank | 0xAAAA, 0xA0)
-	c.write_cart(addr, data)
-	write_byte(addr + 0x7F, data[0x7F])
 
 # -----------------------------------------------------------------------------
 
@@ -142,14 +60,14 @@ def load_map(path):
 # -----------------------------------------------------------------------------
 
 def cleanup():
-	read_reset()
+	np.read_reset()
 
 	#/WP=LOW, force write protect
-	write_byte(0x2400, 0x03)
+	np.write_byte(0x2400, 0x03)
 
 def write_rom(data):
 	print("erasing ROM", end='\r');
-	chip_erase()
+	np.chip_erase()
 
 	rom1 = data[0x000000:0x200000]
 	rom2 = data[0x200000:0x400000]
@@ -164,10 +82,10 @@ def write_rom(data):
 		if offset1 < size1:
 			if not busy1:
 				print("writing ROM %u / %u bytes" % (offset1 + offset2, size1 + size2), end='\r')
-				page_write(0xC00000 | offset1, rom1[offset1:offset1+0x80])
+				np.page_write(0xC00000 | offset1, rom1[offset1:offset1+0x80])
 				busy1 = True
 			else:
-				status = read_byte(0xC00000)
+				status = np.read_byte(0xC00000)
 				if status & 0x80:
 					busy1 = False
 					if status & 0x10:
@@ -176,10 +94,10 @@ def write_rom(data):
 		if offset2 < size2:
 			if not busy2:
 				print("writing ROM %u / %u bytes" % (offset1 + offset2, size1 + size2), end='\r')
-				page_write(0xE00000 | offset2, rom2[offset2:offset2+0x80])
+				np.page_write(0xE00000 | offset2, rom2[offset2:offset2+0x80])
 				busy2 = True
 			else:
-				status = read_byte(0xE00000)
+				status = np.read_byte(0xE00000)
 				if status & 0x80:
 					busy2 = False
 					if status & 0x10:
@@ -187,7 +105,7 @@ def write_rom(data):
 					offset2 += 0x80
 
 	print("writing ROM %u / %u bytes" % (offset1 + offset2, size1 + size2))
-	read_reset()
+	np.read_reset()
 	return offset1 + offset2
 
 def verify_rom(data):
@@ -206,20 +124,20 @@ def verify_rom(data):
 def write_map(data):
 	assert(len(data) == 512)
 	print("erasing map", end='\r');
-	hidden_erase()
+	np.hidden_erase()
 	print("writing map", end='\r');
-	status  = hidden_write(0xC0FF00, data[0x000:0x080])
-	status |= hidden_write(0xC0FF80, data[0x080:0x100])
-	status |= hidden_write(0xE0FF00, data[0x100:0x180])
-	status |= hidden_write(0xE0FF80, data[0x180:0x200])
+	status  = np.hidden_write(0xC0FF00, data[0x000:0x080])
+	status |= np.hidden_write(0xC0FF80, data[0x080:0x100])
+	status |= np.hidden_write(0xE0FF00, data[0x100:0x180])
+	status |= np.hidden_write(0xE0FF80, data[0x180:0x200])
 	return 0 if status else len(data)
 
 def verify_map(data):
 	assert(len(data) == 512)
 	print("verifying map", end='\r');
-	show_hidden()
+	np.show_hidden()
 	tmp = c.read_cart(0xC0FF00, 0x100) + c.read_cart(0xE0FF00, 0x100)
-	read_reset()
+	np.read_reset()
 	return 0 if bytes(tmp) != data else len(data)
 
 def write_sram(data):
@@ -267,29 +185,17 @@ if (args.rom is None) and (args.map is None) and (args.sram is None):
 c = usbclient.USBClient()
 c.open()
 print("opened USB device successfully")
-
-tmp = read_byte(0x2400)
-if tmp == 0x7D:
-	wakeup()
-elif tmp != 0x2A:
-	print("SF memory is not detected")
-	sys.exit()
-
-print("SF memory is detected")
-
+np = nputils.SFMemory(c)
 atexit.register(cleanup)
 
 #/WP=HIGH, release write protect
-write_byte(0x2400, 0x02)
-
-#HIROM:ALL
-write_byte(0x2400, 0x04)
+np.write_byte(0x2400, 0x02)
 
 if args.rom is not None:
 	write_and_verify(write_rom, verify_rom, args.rom, "ROM")
 
 if args.map is not None:
-	show_hidden()
+	np.show_hidden()
 
 	if not args.rewrite_serial:
 		bootsect = c.read_cart(0xC0FF00, 0x100) + c.read_cart(0xE0FF00, 0x100)
